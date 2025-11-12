@@ -26,6 +26,7 @@ LocalColabFold is an installer script designed to make ColabFold functionality a
 
 ## New Updates
 
+- 12Nov2025,replace conda X86 with an ARM64 version.
 - 30Jan2024, ColabFold 1.5.5 (Compatible with AlphaFold 2.3.2). Now LocalColabFold requires **CUDA 12.1 or later**. Please update your CUDA driver.
 - 30Apr2023, Updated to use python 3.10 for compatibility with Google Colaboratory.
 - 09Mar2023, version 1.5.1 released. The base directory has been changed to `localcolabfold` from `colabfold_batch` to distinguish it from the execution command.
