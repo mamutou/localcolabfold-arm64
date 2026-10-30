@@ -51,7 +51,7 @@ conda activate "$COLABFOLDDIR/colabfold-conda"
 
 # Download the updater
 wget -qnc -O "$COLABFOLDDIR/update_M1mac.sh" \
-    https://raw.githubusercontent.com/YoshitakaMo/localcolabfold/main/update_M1mac.sh
+    https://raw.githubusercontent.com/mamutou/localcolabfold-arm64/main/update_M1mac.sh
 chmod +x "$COLABFOLDDIR/update_M1mac.sh"
 
 # Download weights

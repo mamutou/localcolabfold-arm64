@@ -49,7 +49,7 @@ conda activate "$COLABFOLDDIR/colabfold-conda"
 
 # Download the updater
 wget -qnc -O "$COLABFOLDDIR/update_intelmac.sh" \
-    https://raw.githubusercontent.com/YoshitakaMo/localcolabfold/main/update_intelmac.sh
+    https://raw.githubusercontent.com/mamutou/localcolabfold-arm64/main/update_intelmac.sh
 chmod +x "$COLABFOLDDIR/update_intelmac.sh"
 
 # Download weights

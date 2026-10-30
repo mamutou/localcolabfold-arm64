@@ -1,161 +1,201 @@
-# LocalColabFold
+# LocalColabFold — ARM64 (aarch64) fork
 
-[ColabFold](https://colab.research.google.com/github/sokrypton/ColabFold/blob/main/AlphaFold2.ipynb) on your local PC (or macOS). See also [ColabFold repository](https://github.com/sokrypton/ColabFold).
+[ColabFold](https://github.com/sokrypton/ColabFold) on your own **64-bit ARM (aarch64) Linux** machine, with no Colab timeouts and no GPU quota.
 
-## What is LocalColabFold?
+This repository is a fork of [YoshitakaMo/localcolabfold](https://github.com/YoshitakaMo/localcolabfold). Upstream's installer is written for x86_64 Linux and macOS: it downloads `Miniforge3-Linux-x86_64.sh`, installs `jax[cuda12]` from x86_64-only wheel naming, and ships Intel/M1 macOS scripts. On an ARM64 server (NVIDIA DGX Spark / GB10, Grace Hopper, Graviton, Ampere Altra + GPU, …) that recipe stops immediately at the conda bootstrap and never reaches a working `colabfold_batch`.
 
-LocalColabFold is an installer script designed to make ColabFold functionality available on users' local machines. It supports wide range of operating systems, such as Windows 10 or later (using Windows Subsystem for Linux 2), macOS, and Linux.
+This fork keeps upstream's structure and command-line workflow, but replaces the architecture-specific pieces with ARM64-native ones and documents the aarch64 pitfalls that are otherwise invisible until you hit them.
 
-**If you only intend to predict a small number of naturally occurring proteins, I recommend using [ColabFold notebook](https://colab.research.google.com/github/sokrypton/ColabFold/blob/main/AlphaFold2.ipynb) or downloading structures from the [AlphaFold Protein Structure Database](https://alphafold.ebi.ac.uk/) or [UniProt](https://www.uniprot.org/). LocalColabFold is suitable for more advanced applications, such as batch processing of structure predictions for natural complexes, non-natural proteins, or predictions with manually specified MSAs/templates.**
+- Upstream project: <https://github.com/YoshitakaMo/localcolabfold>
+- This fork: <https://github.com/mamutou/localcolabfold-arm64>
 
-## Advantages of LocalColabFold
+## Tested environment
 
-- **Structure inference and relaxation will be accelerated if your PC has Nvidia GPU and CUDA drivers.**
-- **No Time out (90 minutes and 12 hours)**
-- **No GPU limitations**
-- **NOT necessary to prepare the large database required for native AlphaFold2**.
+This is the machine the installer in this repository was developed against — a single NVIDIA DGX Spark:
 
-## Note (May 21, 2024)
+| Item | Value |
+| --- | --- |
+| Machine | NVIDIA DGX Spark, GB10 (Blackwell, compute capability 12.1), 128 GB unified memory |
+| OS | Ubuntu 24.04.4 LTS, `aarch64` |
+| Driver / CUDA toolkit | 580.173.02 / CUDA 13.0.3 (`/usr/local/cuda-13.0`) |
+| Python (ColabFold env) | 3.10.19 (conda-forge, Miniforge3-Linux-aarch64) |
+| ColabFold | 1.5.5 |
+| JAX | `jax`/`jaxlib` 0.6.2 (+ `jax_cuda12_plugin` 0.6.2, **not usable on sm_121**, see below) |
+| Other pins | `numpy` 2.2.6, `openmm` 8.2.0, `tensorflow` 2.20.0 |
 
-- Since current GPU-supported jax > 0.4.26 requires CUDA 12.1 or later and cudnn 9, please upgrade or install your CUDA driver and cudnn. CUDA 12.4 is recommended.
+Real predictions from this machine (monomer and multimer, `alphafold2_ptm` / `alphafold2_multimer_v3`, default MSA server) completed successfully, so the CPU path is end-to-end verified. The GPU path is **not**: see [GPU acceleration](#gpu-acceleration-experimental).
 
-## Note (Jan 30, 2024)
+## What this fork changes
 
-- ColabFold now upgrade to 1.5.5 (compatible with AlphaFold 2.3.2). Now LocalColabFold requires **CUDA 12.1 or later**. Please update your CUDA driver if you have not done so.
-- Now (Local)ColabFold can predict protein structures without connecting the Internet. Use [`setup_databases.sh`](https://github.com/sokrypton/ColabFold/blob/main/setup_databases.sh) script to download and build the databases (See also [ColabFold Downloads](https://colabfold.mmseqs.com/)). An instruction to run `colabfold_search` to obtain the MSA and templates locally is written in [this comment](https://github.com/sokrypton/ColabFold/issues/563).
+| File | Change |
+| --- | --- |
+| `install_colabbatch_linux.sh` | Detects `x86_64` vs `aarch64` and picks the matching Miniforge3; on aarch64 installs the ARM64-native toolchain, a pinned known-good JAX, applies the ARM64 patches, and writes `setup_env.sh`. |
+| `setup_env.sh` | New. Source it before running `colabfold_batch` to set `CUDA_HOME`, `LD_LIBRARY_PATH` (incl. `/usr/lib/aarch64-linux-gnu`) and a `JAX_PLATFORMS` value that does not break when CUDA is unavailable. |
+| Updater download URLs | Upstream installers pulled `update_*.sh` from `YoshitakaMo/localcolabfold`; they now pull from this fork, so a fork install stays on the fork. |
+| `README.md` / `README_zh.md` | Rewritten for ARM64 (this file / [中文说明](README_zh.md)). |
+| `README_ja.md` | Removed — it was an older Japanese copy of the upstream README and no longer matched the scripts. |
+| `beta_install_colabbatch_linux.sh`, `beta_update_linux.sh` | Removed — pre-1.2 legacy scripts pinned to python 3.8/3.9 and to an **x86_64** CUDA-11 `jaxlib` wheel. Nothing in them can work on aarch64, and they were already broken on x86_64. |
+| macOS installers | Kept unmodified for convenience; they are Apple-only and irrelevant to ARM64 Linux. Use upstream for Intel/M-series Macs. |
 
-## New Updates
+Everything outside these files (`colabfold_batch` behaviour, input formats, flags, model weights) is upstream ColabFold and unchanged.
 
-- 12Nov2025,replace conda X86 with an ARM64 version.
-- 30Jan2024, ColabFold 1.5.5 (Compatible with AlphaFold 2.3.2). Now LocalColabFold requires **CUDA 12.1 or later**. Please update your CUDA driver.
-- 30Apr2023, Updated to use python 3.10 for compatibility with Google Colaboratory.
-- 09Mar2023, version 1.5.1 released. The base directory has been changed to `localcolabfold` from `colabfold_batch` to distinguish it from the execution command.
-- 09Mar2023, version 1.5.0 released. See [Release v1.5.0](https://github.com/YoshitakaMo/localcolabfold/releases/tag/v1.5.0)
-- 05Feb2023, version 1.5.0-pre released.
-- 16Jun2022, version 1.4.0 released. See [Release v1.4.0](https://github.com/YoshitakaMo/localcolabfold/releases/tag/v1.4.0)
-- 07May2022, **Updated `update_linux.sh`.** See also [How to update](#how-to-update). Please use a new option `--use-gpu-relax` if GPU relaxation is required (recommended).
-- 12Apr2022, version 1.3.0 released. See [Release v1.3.0](https://github.com/YoshitakaMo/localcolabfold/releases/tag/v1.3.0)
-- 09Dec2021, version 1.2.0-beta released. easy-to-use updater scripts added. See [How to update](#how-to-update).
-- 04Dec2021, LocalColabFold is now compatible with the latest [pip installable ColabFold](https://github.com/sokrypton/ColabFold#running-locally). In this repository, I will provide a script to install ColabFold with some external parameter files to perform relaxation with AMBER. The weight parameters of AlphaFold and AlphaFold-Multimer will be downloaded automatically at your first run.
+## Installation (Linux ARM64)
 
-## Installation
+### Prerequisites
 
-### For Linux
+1. `curl`, `git`, `wget`:
 
-1. Make sure `curl`, `git`, and `wget` commands are already installed on your PC. If not present, you need install them at first. For Ubuntu, type `sudo apt -y install curl git wget`.
-2. Make sure your Cuda compiler driver is **11.8 or later** (the latest version 12.4 is preferable). If you don't have a GPU or don't plan to use a GPU, you can skip this step :<pre>$ nvcc --version
-nvcc: NVIDIA (R) Cuda compiler driver
-Copyright (c) 2005-2022 NVIDIA Corporation
-Built on Wed_Sep_21_10:33:58_PDT_2022
-Cuda compilation tools, release 11.8, V11.8.89
-Build cuda_11.8.r11.8/compiler.31833905_0
-</pre>DO NOT use `nvidia-smi` to check the version.<br>See [NVIDIA CUDA Installation Guide for Linux](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html) if you haven't installed it.
-3. Make sure your GNU compiler version is **12.0 or later** because `GLIBCXX_3.4.30` is required for openmm 8.0.0 for `--amber` relaxation.
-If the version is old (e.g. CentOS 7, Rocky/Almalinux 8, etc.), install a new one and add `PATH` to it.
-4. Download `install_colabbatch_linux.sh` from this repository:<pre>$ wget https://raw.githubusercontent.com/YoshitakaMo/localcolabfold/main/install_colabbatch_linux.sh</pre> and run it in the directory where you want to install:<pre>$ bash install_colabbatch_linux.sh</pre>About 5 minutes later, `localcolabfold` directory will be created. Do not move this directory after the installation.
+   ```bash
+   sudo apt -y install curl git wget
+   ```
 
-    Keep the network unblocked. And **check the log** output to see if there are any errors.
+2. GNU compiler **12.0 or later** (`GLIBCXX_3.4.30` is required by openmm 8.2 for `--amber` relaxation):
 
-    If you find errors in the output log, the easiest way is to check the network and delete the localcolabfold directory, then re-run the installation script.
+   ```bash
+   gcc --version
+   ```
 
-5. Add environment variable PATH:<pre># For bash or zsh<br># e.g. export PATH="/home/moriwaki/Desktop/localcolabfold/colabfold-conda/bin:\$PATH"<br>export PATH="/path/to/your/localcolabfold/colabfold-conda/bin:\$PATH"</pre>
-It is recommended to add this export command to `~/.bashrc` and restart bash (`~/.bashrc` will be executed every time bash is started)
+   On Ubuntu 24.04 the default `gcc-13` is fine.
 
-6. To run the prediction, type <pre>colabfold_batch input outputdir/</pre>The result files will be created in the `outputdir`. This command will execute the prediction without templates and relaxation (energy minimization). If you want to use templates and relaxation, add `--templates` and `--amber` flags, respectively. For example,
+3. If you plan to use a GPU, a CUDA **13.x** toolkit matching your driver. Check with `nvcc --version`, **not** `nvidia-smi`:
 
-    <pre>colabfold_batch --templates --amber input outputdir/</pre>
+   ```bash
+   $ nvcc --version
+   Cuda compilation tools, release 13.0, V13.0.88
+   ```
 
-    `colabfold_batch` will automatically detect whether the prediction is for monomeric or complex prediction. In most cases, users don't have to add `--model-type alphafold2_multimer_v3` to turn on multimer prediction. `alphafold2_multimer_v1, alphafold2_multimer_v2` are also available. Default is `auto` (use `alphafold2_ptm` for monomers and `alphafold2_multimer_v3` for complexes.)
+4. Enough disk: the conda environment is ~3 GB, the AlphaFold2/ColabFold weights add ~4 GB, results are extra.
 
-If you have some errors on `--amber` relaxation, adding `export LD_LIBRARY_PATH=“/path/to/your/localcolabfold/colabfold-conda/lib:${LD_LIBRARY_PATH}”` may solve this issue before running `colabfold_batch`. 
-For more details, see [Flags](#flags) and `colabfold_batch --help`.
-
-### For WSL2 (in Windows)
-
-**Caution: If your installation fails due to symbolic link (`symlink`) creation issues, this is due to the Windows file system being case-insensitive (while the Linux file system is case-sensitive).** To resolve this, run the following command on Windows Powershell:
-```
-fsutil file SetCaseSensitiveInfo path\to\localcolabfold\installation enable
-```
-
-Replace `path\to\colabfold\installation` with the path to the directory where you are installing LocalColabFold. Also, make sure that you are running the command on Windows Powershell (not WSL). For more details, see [Adjust Case Sensitivty (Microsoft)](https://learn.microsoft.com/en-us/windows/wsl/case-sensitivity).
-
-Before running the prediction:
-
-```
-export TF_FORCE_UNIFIED_MEMORY="1"
-export XLA_PYTHON_CLIENT_MEM_FRACTION="4.0"
-export XLA_PYTHON_CLIENT_ALLOCATOR="platform"
-export TF_FORCE_GPU_ALLOW_GROWTH="true"
-```
-
-It is recommended to add these export commands to `~/.bashrc` and restart bash (`~/.bashrc` will be executed every time bash is started)
-
-### For macOS
-
-**Caution: Due to the lack of Nvidia GPU/CUDA driver, the structure prediction on macOS are 5-10 times slower than on Linux+GPU**. For the test sequence (58 a.a.), it may take 30 minutes. However, it may be useful to play with it before preparing Linux+GPU environment.
-
-You can check whether your Mac is Intel or Apple Silicon by typing `uname -m` on Terminal.
+### Install
 
 ```bash
-$ uname -m
-x86_64 # Intel
-arm64  # Apple Silicon
+mkdir -p ~/work && cd ~/work          # do NOT move this directory afterwards
+wget https://raw.githubusercontent.com/mamutou/localcolabfold-arm64/main/install_colabbatch_linux.sh
+bash install_colabbatch_linux.sh
 ```
 
-Please use the correct installer for your Mac.
-
-#### For Mac with Intel CPU
-
-1. Install [Homebrew](https://brew.sh/index_ja) if not present:<pre>$ /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"</pre>
-2. Install `wget`, `gnu-sed`, [HH-suite](https://github.com/soedinglab/hh-suite) and [kalign](https://github.com/TimoLassmann/kalign) using Homebrew:<pre>$ brew install wget gnu-sed<br>\$ brew install brewsci/bio/hh-suite brewsci/bio/kalign</pre>
-3. Download `install_colabbatch_intelmac.sh` from this repository:<pre>$ wget https://raw.githubusercontent.com/YoshitakaMo/localcolabfold/main/install_colabbatch_intelmac.sh</pre> and run it in the directory where you want to install:<pre>$ bash install_colabbatch_intelmac.sh</pre>About 5 minutes later, `localcolabfold` directory will be created. Do not move this directory after the installation.
-4. The rest procedure is the same as "For Linux".
-
-#### For Mac with Apple Silicon (M1 chip)
-
-**Note: This installer is experimental because most of the dependent packages are not fully tested on Apple Silicon Mac.**
-
-1. Install [Homebrew](https://brew.sh/index_ja) if not present:<pre>$ /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"</pre>
-2. Install several commands using Homebrew (Now kalign 3.3.2 is available!):<pre>$ brew install wget cmake gnu-sed<br>$ brew install brewsci/bio/hh-suite<br>$ brew install brewsci/bio/kalign</pre>
-3. Install `miniforge` command using Homebrew:<pre>$ brew install --cask miniforge</pre>
-4. Download `install_colabbatch_M1mac.sh` from this repository:<pre>$ wget https://raw.githubusercontent.com/YoshitakaMo/localcolabfold/main/install_colabbatch_M1mac.sh</pre> and run it in the directory where you want to install:<pre>$ bash install_colabbatch_M1mac.sh</pre>About 5 minutes later, `localcolabfold` directory will be created. Do not move this directory after the installation. **You can ignore the installation errors that appear along the way**.
-5. The rest procedure is the same as "For Linux".
-
-### Input Examples
-
-ColabFold can accept multiple file formats or directory.
+About 5–15 minutes later you get `~/work/localcolabfold/` with:
 
 ```
-positional arguments:
-  input                 Can be one of the following: Directory with fasta/a3m
-                        files, a csv/tsv file, a fasta file or an a3m file
-  results               Directory to write the results to
+localcolabfold/
+├── conda/                 # Miniforge3 (aarch64)
+├── colabfold-conda/       # python 3.10 env: colabfold, jax, openmm, kalign2, hhsuite, mmseqs2
+├── colabfold/             # model weights
+├── setup_env.sh           # source this before predicting
+└── update_linux.sh
 ```
 
-#### fasta format
+Keep the network unblocked and read the log as it goes by. If the install fails, delete the `localcolabfold` directory and re-run — the script is not designed to resume.
 
-It is recommended that the header line starting with `>` be short since the description will be the prefix of the output file. It is acceptable to insert line breaks in the amino acid sequence.
+### Set up your shell
 
-```:P61823.fasta
+```bash
+source ~/work/localcolabfold/setup_env.sh
+```
+
+(`setup_env.sh` is idempotent; add that line to `~/.bashrc` if you want it always on. It exports `PATH`, `CUDA_HOME`/`LD_LIBRARY_PATH` and a safe `JAX_PLATFORMS`.)
+
+### First run
+
+```bash
+cat > test.fasta <<'EOF'
+>sp|P61823
+MALKSLVLLSLLVLVLLLVRVQPSLGKETAAAKFERQHMDSSTSAASSSNYCNQMMKSRN
+LTKDRCKPVNTFVHESLADVQAVCSQKNVACKNGQTNCYQSYSTMSITDCRETGSSKYPN
+CAYKTTQANKHIIVACEGNPYVPVHFDASV
+EOF
+
+colabfold_batch test.fasta out/
+```
+
+Results (`*_unrelaxed_rank_001_*.pdb`, `*_scores_rank_001_*.json`, `*_plddt.png`, `*_pae.png`) land in `out/`. Add `--templates` and `--amber` when you want templates and AMBER relaxation.
+
+## Verify the install
+
+```bash
+source ~/work/localcolabfold/setup_env.sh
+python -c "import importlib.metadata as m; print(m.version('colabfold'), m.version('jax'))"
+python -c "import jax; print(jax.devices())"
+colabfold_batch --help | head -5
+```
+
+Expected on this stack: `1.5.5 0.6.2`, and `[CpuDevice(id=0)]` (see next section for why it is not a GPU).
+
+## GPU acceleration (experimental)
+
+**Short version: with the pinned stack above, ColabFold runs on CPU on GB10.** Ask JAX for CUDA in that environment and you get:
+
+```
+RuntimeError: Unable to initialize backend 'cuda': INTERNAL: no supported devices found for platform CUDA
+```
+
+Cause: `jaxlib` 0.6.2 / `jax_cuda12_plugin` 0.6.2 ship cubins for pre-Blackwell SMs. GB10 is `sm_121`, so the plugin loads, finds no matching device, and JAX falls back to — or dies on — CPU. Nothing in `LD_LIBRARY_PATH` fixes this; the limitation is inside the wheel.
+
+The situation improved upstream of ColabFold: JAX publishes `jax[cuda13]` (CUDA 13 plugin + PJRT) with `linux_aarch64` wheels from **0.7.2** onward, and Python wheels for those start at **cp311** (no cp310). On this machine the following was verified to enumerate the GPU:
+
+```bash
+# separate env — do not touch the ColabFold env
+python3.12 -m venv ~/cf_probe/venv          # Ubuntu 24.04 ships python3.12
+~/cf_probe/venv/bin/pip install "jax[cuda13]==0.7.2"
+~/cf_probe/venv/bin/python -c "import jax; print(jax.__version__, jax.devices())"
+# 0.7.2 [CudaDevice(id=0)]
+```
+
+`colabfold[alphafold-minus-jax]` (1.6.3) also imports cleanly in that venv. What is **not** verified: an end-to-end prediction under jax 0.7.x — ColabFold 1.5–1.6 was written against the jax 0.4/0.5 API surface, so a real run may still fail in the model code. Treat `jax[cuda13]` as the path to try if you need GPU throughput, and validate with one short sequence before trusting a batch.
+
+To use a GPU once you have a working combination, export `JAX_PLATFORMS=cuda` (or leave it unset and let JAX auto-detect) and check `jax.devices()` before launching a long job.
+
+## Measured capacity on DGX Spark
+
+Synthetic sequences, `--msa-mode single_sequence` and a custom A3M at depth 512, 1 recycle, 1 model, 1 seed, bfloat16, 128 GB unified memory, no relaxation:
+
+| Length | single-sequence | MSA depth 512 |
+| --- | --- | --- |
+| 1000 | — | ✅ |
+| 1500 | ✅ | ✅ |
+| 2000 | — | ✅ |
+| 2500 | ✅ | ✅ |
+| 2800 | ✅ | ✅ |
+| 3000 | ✅ | ✅ |
+| 3200 | ✅ | ✅ |
+| 3400 | ✅ (~48 min) | ✅ |
+| 3450 | ❌ OOM | ❌ OOM |
+
+So budget **L ≲ 3400** per prediction on this hardware, and note that the memory ceiling moves with MSA depth, `--num-recycle` and model count.
+
+## Known aarch64 issues (and what this fork does about them)
+
+1. **`jax[cuda12]` cannot see Blackwell GPUs.** See [GPU acceleration](#gpu-acceleration-experimental). The x86_64 installer's `jax[cuda12]==0.5.3` line is *not* a working GPU recipe on GB10.
+2. **`ModuleNotFoundError: No module named 'tpu_info'`** when importing `colabfold.batch` on some installs. The installer patches the import into a `try/except ImportError`.
+3. **`jax.config.update('jax_enable_x64', False)` placed above `from __future__ import ...` in `batch.py`** makes the module a `SyntaxError`. The patch inserts the float32 configuration *after* every `__future__` import and byte-compiles `batch.py` to confirm.
+4. **A stale `JAX_PLATFORMS=cuda`** turns every later run into a hard failure once the CUDA plugin is unusable. `setup_env.sh` only sets `cuda` when a CUDA-capable JAX is actually present, and clears it otherwise.
+5. **cuDNN/CUDA libraries on aarch64** live in `/usr/lib/aarch64-linux-gnu`, not `/usr/lib/x86_64-linux-gnu`. `setup_env.sh` adds both.
+6. **Package availability on `linux-aarch64`** differs from x86_64. Verified on 2026-10 against conda-forge/bioconda and PyPI:
+
+   | Package | `linux-aarch64` |
+   | --- | --- |
+   | `openmm` (conda-forge) | ✅ 8.2.x available |
+   | `hhsuite` = 3.3.0 (bioconda) | ✅ |
+   | `mmseqs2` (bioconda) | ✅ |
+   | `kalign2` 2.04 / `kalign` 3.x | ✅ |
+   | `jaxlib` / `jax-cuda12-*` | ✅ (cp310+) |
+   | `jax-cuda13-*` | ✅ from 0.7.2, but **cp311+ only** |
+   | `colabfold` (PyPI sdist) | ✅ installed from git/pip |
+
+## Input formats
+
+`colabfold_batch` accepts a FASTA file, an A3M file, a CSV/TSV file, or a directory of FASTA/A3M files.
+
+```fasta
 >sp|P61823
 MALKSLVLLSLLVLVLLLVRVQPSLGKETAAAKFERQHMDSSTSAASSSNYCNQMMKSRN
 LTKDRCKPVNTFVHESLADVQAVCSQKNVACKNGQTNCYQSYSTMSITDCRETGSSKYPN
 CAYKTTQANKHIIVACEGNPYVPVHFDASV
 ```
 
-**For prediction of multimers, insert `:` between the protein sequences.**
+Multimers: separate chains with `:`, and note that numbers in the header are parsed as stoichiometry (`>2x3_A:3_B` style copies also work):
 
-```
->1BJP_homohexamer
-PIAQIHILEGRSDEQKETLIREVSEAISRSLDAPLTSVRVIITEMAKGHFGIGGELASKVRR:
-PIAQIHILEGRSDEQKETLIREVSEAISRSLDAPLTSVRVIITEMAKGHFGIGGELASKVRR:
-PIAQIHILEGRSDEQKETLIREVSEAISRSLDAPLTSVRVIITEMAKGHFGIGGELASKVRR:
-PIAQIHILEGRSDEQKETLIREVSEAISRSLDAPLTSVRVIITEMAKGHFGIGGELASKVRR:
-PIAQIHILEGRSDEQKETLIREVSEAISRSLDAPLTSVRVIITEMAKGHFGIGGELASKVRR:
-PIAQIHILEGRSDEQKETLIREVSEAISRSLDAPLTSVRVIITEMAKGHFGIGGELASKVRR
-```
-
-```
+```fasta
 >3KUD_RasRaf_complex
 MTEYKLVVVGAGGVGKSALTIQLIQNHFVDEYDPTIEDSYRKQVVIDGETCLLDILDTAGQEEYSAMRDQ
 YMRTGEGFLCVFAINNTKSFEDIHQYREQIKRVKDSDDVPMVLVGNKCDLAARTVESRQAQDLARSYGIP
@@ -164,94 +204,67 @@ PSKTSNTIRVFLPNKQRTVVNVRNGMSLHDCLMKALKVRGLQPECCAVFRLLHEHKGKKARLDWNTDAAS
 LIGEELQVDFL
 ```
 
-Multiple `>` header lines with sequences in a FASTA format file yield multiple predictions at once in the specified output directory.
+CSV:
 
-#### csv format
-
-In a csv format, `id` and `sequence` should be separated by `,`.
-
-```:test.csv
+```csv
 id,sequence
 5AWL_1,YYDPETGTWY
-3G5O_A_3G5O_B,MRILPISTIKGKLNEFVDAVSSTQDQITITKNGAPAAVLVGADEWESLQETLYWLAQPGIRESIAEADADIASGRTYGEDEIRAEFGVPRRPH:MPYTVRFTTTARRDLHKLPPRILAAVVEFAFGDLSREPLRVGKPLRRELAGTFSARRGTYRLLYRIDDEHTTVVILRVDHRADIYRR
 ```
 
-#### a3m format
+## Flags worth knowing
 
-You can input your a3m format MSA file. For multimer predictions, the a3m file should be compatible with colabfold format.
+| Flag | Effect |
+| --- | --- |
+| `--amber` | AMBER relaxation; `--num-relax N` limits how many top models get relaxed |
+| `--use-gpu-relax` | Run AMBER on GPU (NVIDIA + CUDA only) |
+| `--templates` | Use PDB templates; `--custom-template-path DIR` restricts it to local files |
+| `--num-recycle N` | More recycles, better/slower; default 3 |
+| `--num-seeds N` / `--random-seed N` | Sample several seeds — useful on a CPU-only box where you trade time for diversity |
+| `--max-msa 512:1024` | Cap MSA depth — **the cheapest way to fit long sequences on this machine** |
+| `--use-dropout` | Sample from model uncertainty |
+| `--overwrite-existing-results` | Re-run existing ids |
 
-### Flags
-
-These flags are useful for the predictions.
-
-- **`--amber`** : Use amber for structure refinement (relaxation / energy minimization). To control number of top ranked structures are relaxed set `--num-relax`.
-- **`--templates`** : Use templates from pdb.
-- **`--use-gpu-relax`** : Run amber on NVidia GPU instead of CPU. This feature is only available on a machine with Nvidia GPUs.
-- **`--num-recycle <int>`** : Number of prediction recycles. Increasing recycles can improve the quality but slows down the prediction. Default is `3`. (e.g. `--num-recycle 10`)
-- `--custom-template-path <directory>` : Restrict template files used for `--template` to only those contained in the specified directory. This flag enables us to use non-public pdb files for the prediction. See also https://github.com/sokrypton/ColabFold/issues/177 .
-- `--random-seed <int>` **Changing the seed for the random number generator can result in different structure predictions.** (e.g. `--random-seed 42`)
-- `--num-seeds <int>` Number of seeds to try. Will iterate from range(random_seed, random_seed+num_seeds). (e.g. `--num-seed 5`)
-- `--max-msa` : Defines: `max-seq:max-extra-seq` number of sequences to use (e.g. `--max-msa 512:1024`). `--max-seq` and `--max-extra-seq` arguments are also available if you want to specify separately. This is a reimplementation of the paper of [Sampling alternative conformational states of transporters and receptors with AlphaFold2](https://elifesciences.org/articles/75751) demonstrated by del Alamo *et al*.
-- `--use-dropout` : activate dropouts during inference to sample from uncertainity of the models.
-- `--overwrite-existing-results` : Overwrite the result files.
-- For more information, `colabfold_batch --help`.
+Full list: `colabfold_batch --help`.
 
 ## How to update
 
-Since [ColabFold](https://github.com/sokrypton/ColabFold) is still a work in progress, your localcolabfold should be also updated frequently to use the latest features. An easy-to-use update script is provided for this purpose.
-
-To update your localcolabfold, simply execute the following:
+ColabFold itself moves fast. Update the environment (not the install directory) with:
 
 ```bash
-# set your OS. Select one of the following variables {linux,intelmac,M1mac}
-$ OS=linux # if Linux
-# navigate to the directory where you installed localcolabfold, e.g.
-$ cd /home/moriwaki/Desktop/localcolabfold/
-# get the latest updater
-$ wget https://raw.githubusercontent.com/YoshitakaMo/localcolabfold/main/update_${OS}.sh -O update_${OS}.sh
-$ chmod +x update_${OS}.sh
-# execute it.
-$ ./update_${OS}.sh .
+cd ~/work/localcolabfold
+wget https://raw.githubusercontent.com/mamutou/localcolabfold-arm64/main/update_linux.sh -O update_linux.sh
+chmod +x update_linux.sh
+./update_linux.sh .
+```
+
+This reinstalls ColabFold and re-pins the JAX/numpy versions this fork is tested with. If you deliberately upgraded JAX for the GPU path, skip the updater or edit the pins first.
+
+To update this fork's scripts:
+
+```bash
+cd ~/work
+wget https://raw.githubusercontent.com/mamutou/localcolabfold-arm64/main/install_colabbatch_linux.sh -O /tmp/new_installer.sh
+diff install_colabbatch_linux.sh /tmp/new_installer.sh
 ```
 
 ## FAQ
-- What else do I need to do before installation? Do I need sudo privileges?
-  - No, except for installation of `curl` and `wget` commands.
-- Do I need to prepare the large database such as PDB70, BFD, Uniclust30, MGnify?
-  - **No. it is not necessary.** Generation of MSA is performed by the MMseqs2 web server, just as implemented in ColabFold.
-- Are the pLDDT score and PAE figures available?
-  - Yes, they will be generated just like the ColabFold.
-- Is it possible to predict homooligomers and complexes?
-  - Yes, the format of input sequence is the same as ColabFold. See `query_sequence:` and its use of [ColabFold: AlphaFold2 using MMseqs2](https://colab.research.google.com/github/sokrypton/ColabFold/blob/main/AlphaFold2.ipynb).
-- Is it possible to create MSA by jackhmmer?
-  - **No, it is not currently supported**.
-- I want to use multiple GPUs to perform the prediction.
-  - **AlphaFold and ColabFold does not support multiple GPUs**. Only One GPU can model your protein.
-- I have multiple GPUs. Can I specify to run LocalColabfold on each GPU?
-  - Use `CUDA_VISIBLE_DEVICES` environment variable. See https://github.com/YoshitakaMo/localcolabfold/issues/200.
-- I got an error message `CUDA_ERROR_ILLEGAL_ADDRESS: an illegal memory access was encountered`.
-  - You may not have updated to CUDA 11.8 or later. Please check the version of Cuda compiler with `nvcc --version` command, not `nvidia-smi`.
-- Is this available on Windows 10?
-  - You can run LocalColabFold on your Windows 10 with [WSL2](https://docs.microsoft.com/en-us/windows/wsl/install-win10).
-- (New!)I want to use a custom MSA file in the format of a3m.
-  - **ColabFold can accept various input files now**. See the help messsage. You can set your own A3M file, a fasta file that contains multiple sequences (in FASTA format), or a directory that contains multiple fasta files.
 
+- **Do I need the big AlphaFold databases (PDB70, BFD, Uniclust30, MGnify)?** No. MSA generation goes through the MMseqs2 web server, exactly like ColabFold. For offline use, run `setup_databases.sh` from the ColabFold repo and `colabfold_search` locally.
+- **Can I use more than one GPU?** No — AlphaFold/ColabFold predict on a single device. With several GPUs, pick one per process with `CUDA_VISIBLE_DEVICES`.
+- **Is Apple Silicon (M1/M2/M3) supported here?** Not by this fork; that is upstream's `install_colabbatch_M1mac.sh`, which is left unmodified in this repo. Note its default stack (`jax==0.4.23`) is old.
+- **Does it work inside WSL2 on ARM64 Windows?** Untested. Upstream's WSL2 notes (case-sensitive directory setup) still apply.
+- **Why is my prediction so slow?** Check `jax.devices()`. If it says `CpuDevice`, you are on CPU — expected on GB10 today.
+- **MSA server unreachable?** Pass a precomputed A3M with `--msa-mode custom`/a `.a3m` input, or run `colabfold_search` locally.
 
-## Tutorials & Presentations
+## Credits and license
 
-- ColabFold Tutorial presented at the Boston Protein Design and Modeling Club. [[video]](https://www.youtube.com/watch?v=Rfw7thgGTwI) [[slides]](https://docs.google.com/presentation/d/1mnffk23ev2QMDzGZ5w1skXEadTe54l8-Uei6ACce8eI).
+- ColabFold: Sergey Ovchinnikov ([@sokrypton](https://twitter.com/sokrypton)), Milot Mirdita, Martin Steinegger.
+- LocalColabFold (upstream): Yoshitaka Moriwaki ([@YoshitakaMo](https://github.com/YoshitakaMo)).
+- This fork only changes installers and documentation; all scientific credit belongs upstream.
+- License: see [LICENSE](LICENSE) (inherited from upstream).
 
-## Acknowledgments
+### Citations
 
-- The original colabfold was first created by Sergey Ovchinnikov ([@sokrypton](https://twitter.com/sokrypton)), Milot Mirdita ([@milot_mirdita](https://twitter.com/milot_mirdita)) and Martin Steinegger ([@thesteinegger](https://twitter.com/thesteinegger)).
-
-## How do I reference this work?
-
-- Mirdita M, Schütze K, Moriwaki Y, Heo L, Ovchinnikov S and Steinegger M. ColabFold - Making protein folding accessible to all. <br />
-  *Nature Methods* (2022) doi: [10.1038/s41592-022-01488-1](https://www.nature.com/articles/s41592-022-01488-1)
-- If you’re using **AlphaFold**, please also cite: <br />
-  Jumper et al. "Highly accurate protein structure prediction with AlphaFold." <br />
-  *Nature* (2021) doi: [10.1038/s41586-021-03819-2](https://doi.org/10.1038/s41586-021-03819-2)
-- If you’re using **AlphaFold-multimer**, please also cite: <br />
-  Evans et al. "Protein complex prediction with AlphaFold-Multimer." <br />
-  *BioRxiv* (2022) doi: [10.1101/2021.10.04.463034v2](https://www.biorxiv.org/content/10.1101/2021.10.04.463034v2)
+- Mirdita M, Schütze K, Moriwaki Y, Heo L, Ovchinnikov S, Steinegger M. *ColabFold — Making protein folding accessible to all.* Nature Methods (2022). doi:[10.1038/s41592-022-01488-1](https://doi.org/10.1038/s41592-022-01488-1)
+- Using **AlphaFold**: Jumper et al. Nature (2021). doi:[10.1038/s41586-021-03819-2](https://doi.org/10.1038/s41586-021-03819-2)
+- Using **AlphaFold-Multimer**: Evans et al. bioRxiv (2022). doi:[10.1101/2021.10.04.463034](https://doi.org/10.1101/2021.10.04.463034)
